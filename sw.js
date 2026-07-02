@@ -1,6 +1,6 @@
 /* Cache-first service worker: app shell + pdf.js CDN, so the app opens
  * (and parses statements) even offline after the first visit. */
-const CACHE = "stmt-v1";
+const CACHE = "stmt-v3";
 const SHELL = ["./", "index.html", "app.js", "engine.js", "manifest.json",
   "icon-180.png", "icon-192.png", "icon-512.png",
   "pdf.min.js", "pdf.worker.min.js"];

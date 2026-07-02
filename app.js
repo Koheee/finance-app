@@ -6,7 +6,7 @@ const LS_RULES = "ft.rules.v1";
 
 let rows = load(LS_ROWS, []);
 let rules = load(LS_RULES, {});
-let scope = "ALL"; // month filter
+let scope = null; // month filter; null = not chosen yet -> defaults to latest month
 let showAllTx = false;
 
 if (window.pdfjsLib) {
@@ -40,6 +40,7 @@ function render() {
   if (!has) return;
 
   const months = [...new Set(rows.map((r) => r.month))].sort();
+  if (scope === null) scope = months[months.length - 1]; // open on the latest month
   if (scope !== "ALL" && !months.includes(scope)) scope = "ALL";
   renderChips(months);
 
@@ -72,9 +73,10 @@ function render() {
 }
 
 function renderChips(months) {
+  const newestFirst = [...months].reverse(); // latest month sits next to "All"
   $("months").innerHTML =
     [`<button class="chip ${scope === "ALL" ? "on" : ""}" data-m="ALL">All</button>`]
-      .concat(months.map((m) => `<button class="chip ${scope === m ? "on" : ""}" data-m="${m}">${m}</button>`))
+      .concat(newestFirst.map((m) => `<button class="chip ${scope === m ? "on" : ""}" data-m="${m}">${m}</button>`))
       .join("");
   $("months").querySelectorAll(".chip").forEach((b) =>
     b.addEventListener("click", () => { scope = b.dataset.m; showAllTx = false; render(); }));
@@ -244,7 +246,7 @@ $("btnWipe").addEventListener("click", () => {
   if (!confirm("Erase all transactions and rules stored on this device? Export a CSV first if you want a backup.")) return;
   rows = []; rules = {};
   localStorage.removeItem(LS_ROWS); localStorage.removeItem(LS_RULES);
-  scope = "ALL"; render();
+  scope = null; render();
   toast("Erased. This device now holds no data.");
 });
 
