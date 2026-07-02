@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Statements</title>
+<meta name="description" content="DBS statement analyzer — all processing happens on your device.">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Statements">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<style>
+:root{
+  --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --ring:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#1baf7a; --neg:#e34948;
+  --good:#006300; --bad:#d03b3b; --warn:#fab219; --serious:#ec835a; --ok:#0ca30c;
+}
+@media (prefers-color-scheme: dark){:root{
+  --page:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --ring:rgba(255,255,255,.10);
+  --s1:#3987e5; --s2:#199e70; --neg:#e66767;
+  --good:#0ca30c; --bad:#d03b3b;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--page);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding:env(safe-area-inset-top) 0 calc(24px + env(safe-area-inset-bottom));}
+.wrap{max-width:680px;margin:0 auto;padding:0 14px}
+header.app{padding:18px 2px 6px;display:flex;align-items:baseline;justify-content:space-between}
+header.app h1{font-size:1.05rem;font-weight:700;margin:0}
+header.app .sub{color:var(--muted);font-size:.75rem}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:14px;padding:14px;margin:10px 0}
+.hero{ text-align:left;padding:16px}
+.hero .k{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.hero .v{font-size:2.3rem;font-weight:750;letter-spacing:-.01em;margin:2px 0}
+.hero .s{font-size:.8rem;color:var(--ink-2)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+.tile{background:var(--surface);border:1px solid var(--ring);border-radius:12px;padding:10px 12px}
+.tile .k{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+.tile .v{font-size:1.15rem;font-weight:700;margin-top:2px}
+.pos{color:var(--good)} .negv{color:var(--bad)}
+h2{font-size:.95rem;margin:18px 2px 6px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:4px 2px;-webkit-overflow-scrolling:touch}
+.chip{flex:0 0 auto;border:1px solid var(--ring);background:var(--surface);color:var(--ink-2);
+  border-radius:999px;padding:6px 12px;font-size:.8rem;font-weight:600}
+.chip.on{background:var(--s1);border-color:var(--s1);color:#fff}
+.legend{display:flex;gap:14px;font-size:.75rem;color:var(--ink-2);margin:2px 2px 8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.chart{position:relative}
+.chart .grid-l{position:absolute;left:0;right:0;border-top:1px solid var(--grid);}
+.bars{display:flex;align-items:flex-end;gap:10px;height:150px;position:relative;padding-top:6px}
+.bgrp{flex:1;display:flex;gap:2px;align-items:flex-end;height:100%;min-width:0}
+.bar{flex:1;border-radius:4px 4px 0 0;min-height:2px}
+.b1{background:var(--s1)} .b2{background:var(--s2)}
+.xlab{display:flex;gap:10px;margin-top:6px}
+.xlab div{flex:1;text-align:center;font-size:.68rem;color:var(--muted)}
+.tip{position:absolute;transform:translate(-50%,-100%);background:var(--ink);color:var(--page);
+  font-size:.72rem;padding:6px 9px;border-radius:8px;pointer-events:none;white-space:nowrap;z-index:5}
+table{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:10px}
+th{color:var(--muted);font-weight:600;text-align:right;padding:4px 6px;border-bottom:1px solid var(--grid);font-size:.7rem;text-transform:uppercase;letter-spacing:.04em}
+th:first-child{text-align:left}
+td{padding:6px;border-bottom:1px solid var(--grid);text-align:right;font-variant-numeric:tabular-nums}
+td:first-child{text-align:left;color:var(--ink-2)}
+.catrow{margin:9px 0}
+.cathead{display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:3px}
+.cathead .n{color:var(--ink)} .cathead .a{color:var(--muted);font-variant-numeric:tabular-nums}
+.track{background:color-mix(in srgb, var(--ink) 6%, transparent);height:8px;border-radius:6px;overflow:hidden}
+.fill{height:100%;background:var(--s1);border-radius:6px}
+.check{border-left:4px solid var(--warn)}
+.check.serious{border-left-color:var(--serious)} .check.good{border-left-color:var(--ok)}
+.check .t{font-weight:650;font-size:.85rem;margin-bottom:4px}
+.check ul{margin:4px 0 0;padding-left:16px;font-size:.76rem;color:var(--ink-2)}
+.txn{display:flex;justify-content:space-between;gap:10px;padding:8px 2px;border-bottom:1px solid var(--grid);font-size:.82rem}
+.txn .l{min-width:0}
+.txn .d{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.txn .m{color:var(--muted);font-size:.7rem}
+.txn .a{white-space:nowrap;font-variant-numeric:tabular-nums;font-weight:600}
+.txn .a.in{color:var(--good)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+button,.btn{appearance:none;border:1px solid var(--ring);background:var(--surface);color:var(--ink);
+  border-radius:10px;padding:10px 14px;font-size:.85rem;font-weight:650;cursor:pointer}
+button.primary{background:var(--s1);border-color:var(--s1);color:#fff}
+button.danger{color:var(--bad)}
+input[type=search]{width:100%;border:1px solid var(--ring);background:var(--surface);color:var(--ink);
+  border-radius:10px;padding:10px 12px;font-size:.9rem;margin:6px 0}
+.note{font-size:.74rem;color:var(--muted);margin:6px 2px}
+.msg{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);
+  background:var(--ink);color:var(--page);padding:10px 16px;border-radius:10px;font-size:.82rem;z-index:20;
+  max-width:90vw;text-align:center}
+.empty{ text-align:center;padding:28px 16px}
+.empty .big{font-size:2rem}
+.empty ol{text-align:left;font-size:.85rem;color:var(--ink-2);margin:12px auto;max-width:340px;padding-left:20px}
+.hidden{display:none}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--ring);border-top-color:var(--s1);
+  border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="app">
+    <h1>💳 Statements</h1>
+    <span class="sub" id="rowcount"></span>
+  </header>
+
+  <div id="empty" class="card empty hidden">
+    <div class="big">📥</div>
+    <p><b>Everything runs on this phone.</b><br>Your statements are parsed here in the browser — nothing is uploaded anywhere.</p>
+    <ol>
+      <li><b>Import your history</b> — the <code>transactions_master.csv</code> file (once).</li>
+      <li><b>Import your rules</b> — the <code>personal-rules.json</code> file (once).</li>
+      <li>Each month, <b>add the 3 statement PDFs</b> (card, bank, PayLah).</li>
+    </ol>
+  </div>
+
+  <div class="btnrow">
+    <button class="primary" id="btnAdd">＋ Add statements</button>
+    <button id="btnImport">Import history / rules</button>
+    <button id="btnExport">Export CSV</button>
+  </div>
+  <input type="file" id="filePdf" accept="application/pdf,.pdf" multiple class="hidden">
+  <input type="file" id="fileImport" accept=".csv,.json,text/csv,application/json" multiple class="hidden">
+
+  <div id="dash" class="hidden">
+    <div class="chips" id="months"></div>
+
+    <div class="card hero">
+      <div class="k" id="heroK">True out-of-pocket spending</div>
+      <div class="v" id="heroV">S$0.00</div>
+      <div class="s" id="heroS"></div>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <h2>Cash flow by month</h2>
+    <div class="card">
+      <div class="legend"><span><i style="background:var(--s1)"></i>Income</span>
+        <span><i style="background:var(--s2)"></i>Spending</span></div>
+      <div class="chart" id="cfChart"></div>
+      <table id="cfTable"></table>
+      <div class="note">Bank-account view; internal transfers excluded. Tap a month’s bars for values.</div>
+    </div>
+
+    <h2>Where it went</h2>
+    <div class="card" id="cats"></div>
+
+    <h2>Things to check</h2>
+    <div id="checks"></div>
+
+    <h2>Transactions</h2>
+    <input type="search" id="q" placeholder="Search merchant, person, type…">
+    <div class="card" id="txns"></div>
+  </div>
+
+  <div class="btnrow">
+    <button class="danger" id="btnWipe">Erase all data on this device</button>
+  </div>
+  <footer>All data stays in this browser. Add to Home Screen for the app experience.</footer>
+</div>
+
+<script src="pdf.min.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
