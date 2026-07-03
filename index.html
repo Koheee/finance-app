@@ -32,9 +32,13 @@ body{margin:0;background:var(--page);color:var(--ink);
   font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
   padding:env(safe-area-inset-top) 0 calc(24px + env(safe-area-inset-bottom));}
 .wrap{max-width:680px;margin:0 auto;padding:0 14px}
-header.app{padding:18px 2px 6px;display:flex;align-items:baseline;justify-content:space-between}
+header.app{padding:18px 2px 6px;display:flex;align-items:center;justify-content:space-between}
 header.app h1{font-size:1.05rem;font-weight:700;margin:0}
-header.app .sub{color:var(--muted);font-size:.75rem}
+header.app .sub{color:var(--muted);font-size:.72rem;display:block;margin-top:2px}
+.catrow{cursor:pointer}
+.filterchip{display:inline-flex;align-items:center;gap:7px;background:var(--s1);color:#fff;
+  border-radius:999px;padding:6px 11px;font-size:.78rem;font-weight:600;margin:4px 0 2px}
+.filterchip button{all:unset;cursor:pointer;font-weight:800;padding:0 3px;font-size:.9rem}
 .card{background:var(--surface);border:1px solid var(--ring);border-radius:14px;padding:14px;margin:10px 0}
 .hero{ text-align:left;padding:16px}
 .hero .k{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
@@ -106,8 +110,8 @@ footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px}
 <body>
 <div class="wrap">
   <header class="app">
-    <h1>💳 Statements</h1>
-    <span class="sub" id="rowcount"></span>
+    <div><h1>💳 Statements</h1><span class="sub" id="rowcount"></span></div>
+    <button class="primary" id="btnAdd">＋ Add</button>
   </header>
 
   <div id="empty" class="card empty hidden">
@@ -120,11 +124,6 @@ footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px}
     </ol>
   </div>
 
-  <div class="btnrow">
-    <button class="primary" id="btnAdd">＋ Add statements</button>
-    <button id="btnImport">Import history / rules</button>
-    <button id="btnExport">Export CSV</button>
-  </div>
   <input type="file" id="filePdf" accept="application/pdf,.pdf" multiple class="hidden">
   <input type="file" id="fileImport" accept=".csv,.json,text/csv,application/json" multiple class="hidden">
 
@@ -134,6 +133,7 @@ footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px}
     <div class="card hero">
       <div class="k" id="heroK">True out-of-pocket spending</div>
       <div class="v" id="heroV">S$0.00</div>
+      <div class="s" id="heroD"></div>
       <div class="s" id="heroS"></div>
     </div>
 
@@ -159,12 +159,16 @@ footer{color:var(--muted);font-size:.7rem;text-align:center;margin-top:22px}
       <button class="chip on" data-mode="list">List</button>
       <button class="chip" data-mode="group">By merchant</button>
     </div>
+    <div id="activeFilter"></div>
     <input type="search" id="q" placeholder="Search merchant, person, type…">
     <div class="card" id="txns"></div>
   </div>
 
+  <h2>Your data</h2>
   <div class="btnrow">
-    <button class="danger" id="btnWipe">Erase all data on this device</button>
+    <button id="btnImport">Import history / rules</button>
+    <button id="btnExport">Export CSV</button>
+    <button class="danger" id="btnWipe">Erase all</button>
   </div>
   <footer>All data stays in this browser. Add to Home Screen for the app experience.</footer>
 </div>

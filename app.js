@@ -8,7 +8,8 @@ let rows = load(LS_ROWS, []);
 let rules = load(LS_RULES, {});
 let scope = null; // month filter; null = not chosen yet -> defaults to latest month
 let showAllTx = false;
-let txMode = "list"; // "list" | "group" (aggregate by merchant)
+let txMode = load("ft.txmode.v1", "list"); // "list" | "group" — remembered
+let filt = null; // active drill-down: {kind:"cat"|"merch", value} or null
 
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -56,16 +57,31 @@ function render() {
   const reimb = inScope.filter((r) => r.type === "Reimbursement").reduce((s, r) => s + +r.amount_sgd, 0);
   $("heroS").textContent = `after ${fmt0(reimb)} reimbursed by others`;
 
+  // month-over-month delta — the "am I doing better?" glance
+  const idx = months.indexOf(scope);
+  if (scope !== "ALL" && idx > 0) {
+    const prevM = months[idx - 1];
+    const prev = rows.filter((r) => r.month === prevM).reduce((s, r) => s + (+r.spend_sgd || 0), 0);
+    const d = spend - prev;
+    $("heroD").innerHTML = d <= 0
+      ? `<span class="pos">▼ ${fmt0(Math.abs(d))} less than ${prevM}</span>`
+      : `<span class="negv">▲ ${fmt0(d)} more than ${prevM}</span>`;
+  } else $("heroD").textContent = "";
+
   const inc = cfScope.reduce((s, c) => s + c.income, 0);
   const csp = cfScope.reduce((s, c) => s + c.spending, 0);
   const inv = cfScope.reduce((s, c) => s + c.invested, 0);
   const net = cfScope.reduce((s, c) => s + c.net, 0);
   $("tiles").innerHTML = [
-    ["Income in", fmt0(inc), ""],
-    ["Cash spending", fmt0(csp), ""],
+    ["Money in", fmt0(inc), ""],
+    ["Money out", fmt0(csp), ""],
     ["Invested", fmt0(inv), ""],
-    ["Net", (net >= 0 ? "+" : "−") + fmt0(Math.abs(net)), net >= 0 ? "pos" : "negv"],
+    ["Net saved", (net >= 0 ? "+" : "−") + fmt0(Math.abs(net)), net >= 0 ? "pos" : "negv"],
   ].map(([k, v, cls]) => `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`).join("");
+
+  // keep the List/By-merchant toggle in sync with the remembered mode
+  const tm = $("txmode");
+  if (tm) tm.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c.dataset.mode === txMode));
 
   renderCashflow(cf);
   renderCats(inScope);
@@ -132,12 +148,20 @@ function renderCats(inScope) {
     list = list.slice(0, 8).concat([["Other", rest]]);
   }
   const max = Math.max(...list.map(([, v]) => v), 1);
-  $("cats").innerHTML = list.map(([name, v]) =>
-    `<div class="catrow">
+  $("cats").innerHTML = (list.map(([name, v]) =>
+    `<div class="catrow" data-cat="${esc(name)}">
        <div class="cathead"><span class="n">${esc(name)}</span>
-         <span class="a">${fmt0(v)} · ${Math.round((v / total) * 100)}%</span></div>
+         <span class="a">${fmt0(v)} · ${Math.round((v / total) * 100)}% ›</span></div>
        <div class="track"><div class="fill" style="width:${(v / max) * 100}%"></div></div>
-     </div>`).join("") || `<div class="note">No spending in this period.</div>`;
+     </div>`).join("") || `<div class="note">No spending in this period.</div>`);
+  $("cats").querySelectorAll(".catrow").forEach((el) =>
+    el.addEventListener("click", () => {
+      const c = el.dataset.cat;
+      if (c === "Other") return;
+      filt = { kind: "cat", value: c };
+      showAllTx = false; render();
+      $("q").scrollIntoView({ behavior: "smooth", block: "center" });
+    }));
 }
 
 function renderChecks(inScope) {
@@ -185,18 +209,36 @@ function renderTxnsGrouped(matches) {
   const list = Object.entries(groups).sort((a, b) => Math.abs(b[1].total) - Math.abs(a[1].total));
   $("txns").innerHTML = list.map(([name, g]) => {
     const neg = g.total < 0;
-    return `<div class="txn">
+    return `<div class="txn" data-merch="${esc(name)}" style="cursor:pointer">
       <div class="l"><div class="d">${esc(name)}</div>
-        <div class="m">${g.n}× · ${esc(g.type)}</div></div>
+        <div class="m">${g.n}× · ${esc(g.type)} ›</div></div>
       <div class="a ${neg ? "in" : ""}">${neg ? "−" : ""}${fmt(Math.abs(g.total))}</div>
     </div>`;
   }).join("") || `<div class="note">No spending to group in this period.</div>`;
+  $("txns").querySelectorAll("[data-merch]").forEach((el) =>
+    el.addEventListener("click", () => {
+      filt = { kind: "merch", value: el.dataset.merch };
+      txMode = "list"; save("ft.txmode.v1", txMode);
+      showAllTx = false; render();
+    }));
 }
 
 function renderTxns(inScope) {
+  // active drill-down chip
+  const af = $("activeFilter");
+  if (af) {
+    af.innerHTML = filt
+      ? `<span class="filterchip">${esc(filt.value)}<button id="clearFilt" aria-label="Clear filter">✕</button></span>`
+      : "";
+    const cf = $("clearFilt");
+    if (cf) cf.addEventListener("click", () => { filt = null; showAllTx = false; render(); });
+  }
+
   const q = ($("q").value || "").toLowerCase();
-  const matches = inScope
+  let matches = inScope
     .filter((r) => !q || `${r.description} ${r.counterparty} ${r.type} ${r.source}`.toLowerCase().includes(q));
+  if (filt) matches = matches.filter((r) =>
+    filt.kind === "cat" ? r.type === filt.value : normName(r) === filt.value);
   if (txMode === "group") { renderTxnsGrouped(matches); return; }
   let list = matches.sort((a, b) => (a.date < b.date ? 1 : -1));
   const total = list.length;
@@ -289,7 +331,7 @@ $("btnWipe").addEventListener("click", () => {
   if (!confirm("Erase all transactions and rules stored on this device? Export a CSV first if you want a backup.")) return;
   rows = []; rules = {};
   localStorage.removeItem(LS_ROWS); localStorage.removeItem(LS_RULES);
-  scope = null; render();
+  scope = null; filt = null; render();
   toast("Erased. This device now holds no data.");
 });
 
@@ -298,8 +340,7 @@ $("q").addEventListener("input", () => { showAllTx = false; render(); });
 const txmodeEl = $("txmode"); // tolerate a stale index.html during mixed-version deploys
 if (txmodeEl) txmodeEl.querySelectorAll(".chip").forEach((b) =>
   b.addEventListener("click", () => {
-    txMode = b.dataset.mode;
-    txmodeEl.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === b));
+    txMode = b.dataset.mode; save("ft.txmode.v1", txMode);
     showAllTx = false; render();
   }));
 
