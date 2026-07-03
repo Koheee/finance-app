@@ -8,6 +8,7 @@ let rows = load(LS_ROWS, []);
 let rules = load(LS_RULES, {});
 let scope = null; // month filter; null = not chosen yet -> defaults to latest month
 let showAllTx = false;
+let txMode = "list"; // "list" | "group" (aggregate by merchant)
 
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -151,11 +152,53 @@ function renderChecks(inScope) {
     : `<div class="card"><div class="t">✅ Nothing flagged</div></div>`;
 }
 
+// Collapse a noisy description into a stable merchant key (per analyze.py).
+function normText(s) {
+  let t = (s || "").toUpperCase();
+  t = t.replace(/#?\d{3,}/g, "");
+  t = t.replace(/\b(STORE|ONLINE|PURCHASE|MEMBERSHIP|INC|LLC|USA|COM|PTE|LTD|SGP?|REF|NO)\b/g, "");
+  t = t.replace(/[^A-Z&' ]/g, " ").replace(/\s+/g, " ").trim();
+  return t;
+}
+function normName(r) {
+  if (r.source === "bank") {
+    // Person-to-person and debit-card rows carry a real name/merchant;
+    // for everything else the flow type IS the meaningful group.
+    if (r.type === "Reimbursement") return normText(r.counterparty) || "REIMBURSEMENT";
+    if (r.type === "Debit Card Spend") return normText(r.counterparty || r.description) || "DEBIT CARD";
+    return r.type.toUpperCase();
+  }
+  if (r.source === "paylah" && r.type === "Peer payment")
+    return (r.counterparty || "PEER").toUpperCase(); // keep numbers: they identify the person
+  return normText(r.counterparty || r.description) || (r.description || "").toUpperCase();
+}
+
+function renderTxnsGrouped(matches) {
+  const groups = {};
+  for (const r of matches) {
+    const v = +r.spend_sgd || 0;
+    if (v === 0) continue; // transfers/mirrors aren't spending
+    const key = normName(r);
+    const g = (groups[key] ||= { n: 0, total: 0, type: r.type });
+    g.n += 1; g.total += v;
+  }
+  const list = Object.entries(groups).sort((a, b) => Math.abs(b[1].total) - Math.abs(a[1].total));
+  $("txns").innerHTML = list.map(([name, g]) => {
+    const neg = g.total < 0;
+    return `<div class="txn">
+      <div class="l"><div class="d">${esc(name)}</div>
+        <div class="m">${g.n}× · ${esc(g.type)}</div></div>
+      <div class="a ${neg ? "in" : ""}">${neg ? "−" : ""}${fmt(Math.abs(g.total))}</div>
+    </div>`;
+  }).join("") || `<div class="note">No spending to group in this period.</div>`;
+}
+
 function renderTxns(inScope) {
   const q = ($("q").value || "").toLowerCase();
-  let list = inScope
-    .filter((r) => !q || `${r.description} ${r.counterparty} ${r.type} ${r.source}`.toLowerCase().includes(q))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
+  const matches = inScope
+    .filter((r) => !q || `${r.description} ${r.counterparty} ${r.type} ${r.source}`.toLowerCase().includes(q));
+  if (txMode === "group") { renderTxnsGrouped(matches); return; }
+  let list = matches.sort((a, b) => (a.date < b.date ? 1 : -1));
   const total = list.length;
   if (!showAllTx) list = list.slice(0, 120);
   $("txns").innerHTML = list.map((r) => {
@@ -251,5 +294,13 @@ $("btnWipe").addEventListener("click", () => {
 });
 
 $("q").addEventListener("input", () => { showAllTx = false; render(); });
+
+const txmodeEl = $("txmode"); // tolerate a stale index.html during mixed-version deploys
+if (txmodeEl) txmodeEl.querySelectorAll(".chip").forEach((b) =>
+  b.addEventListener("click", () => {
+    txMode = b.dataset.mode;
+    txmodeEl.querySelectorAll(".chip").forEach((c) => c.classList.toggle("on", c === b));
+    showAllTx = false; render();
+  }));
 
 render();
